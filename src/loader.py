@@ -1,6 +1,7 @@
 import json
 from langchain_core.documents import Document
 
+
 def load_pubmedqa(path, limit=None):
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -9,27 +10,29 @@ def load_pubmedqa(path, limit=None):
     qa_pairs = []
 
     for i, (qid, item) in enumerate(data.items()):
-        if limit and i >= limit:
+        if limit is not None and i >= limit:
             break
 
         question = item["QUESTION"]
         contexts = item["CONTEXTS"]
         answer = item["final_decision"]
+        long_answer = item.get("LONG_ANSWER", "")
 
-        # сохраняем QA
         qa_pairs.append({
             "id": qid,
             "question": question,
-            "answer": answer
+            "answer": answer,
+            "long_answer": long_answer,
+            "relevant_contexts": len(contexts),
         })
 
-        # создаём документы
-        for ctx in contexts:
+        for context_index, ctx in enumerate(contexts):
             documents.append(
                 Document(
                     page_content=ctx,
                     metadata={
                         "question_id": qid,
+                        "context_index": context_index,
                         "source": "pubmedqa"
                     }
                 )
