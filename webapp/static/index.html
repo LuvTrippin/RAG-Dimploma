@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RAG MVP Chat</title>
+  <link rel="stylesheet" href="https://unpkg.com/antd@5/dist/reset.css" />
+  <style>
+    html, body, #root {
+      margin: 0;
+      height: 100%;
+      font-family: Inter, Arial, sans-serif;
+    }
+    .app-shell {
+      height: 100%;
+      padding: 12px;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .app-shell .ant-row {
+      height: 100%;
+    }
+    .app-shell .ant-col {
+      min-height: 0;
+    }
+    .chat-panel {
+      height: calc(100vh - 24px);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .chat-panel .ant-card-body {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+    .chat-log {
+      flex: 1;
+      overflow: auto;
+      min-height: 0;
+      padding: 8px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg {
+      max-width: 88%;
+      white-space: pre-wrap;
+      line-height: 1.45;
+      font-size: 16px;
+    }
+    .msg.user {
+      align-self: flex-end;
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      max-width: 100%;
+      font-weight: 600;
+    }
+    .user-bubble {
+      background: #1677ff;
+      color: #fff;
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: inline-block;
+    }
+    .chat-input {
+      padding-top: 8px;
+    }
+    .sources-box {
+      margin-top: 6px;
+    }
+    .viewer-content {
+      white-space: pre-wrap;
+      max-height: 60vh;
+      overflow: auto;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.45;
+      border: 1px solid #f0f0f0;
+      border-radius: 8px;
+      padding: 10px;
+      background: #fafafa;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/dayjs@1/dayjs.min.js"></script>
+  <script src="https://unpkg.com/antd@5/dist/antd.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const {
+      App: AntdApp,
+      Button,
+      Card,
+      Col,
+      ConfigProvider,
+      Form,
+      Input,
+      List,
+      Modal,
+      Row,
+      Space,
+      Spin,
+      Typography,
+      Upload,
+      message,
+    } = antd;
+
+    const { useEffect, useMemo, useRef, useState } = React;
+    const { Text, Title } = Typography;
+    const { Search } = Input;
+    const { darkAlgorithm, defaultAlgorithm } = antd.theme;
+
+    function SourceLink({ sourceName, sourcePath, onOpen }) {
+      if (!sourcePath) return <span>{sourceName || "unknown"}</span>;
+      return (
+        <Button type="link" style={{ padding: 0 }} onClick={() => onOpen(sourcePath)}>
+          {sourceName || "unknown"}
+        </Button>
+      );
+    }
+
+    function App() {
+      const [messagesData, setMessagesData] = useState([]);
+      const [sources, setSources] = useState([]);
+      const [query, setQuery] = useState("");
+      const [sending, setSending] = useState(false);
+      const [themeMode, setThemeMode] = useState(localStorage.getItem("rag-theme-mode") || "dark");
+      const [isAdmin, setIsAdmin] = useState(false);
+      const [adminLoading, setAdminLoading] = useState(false);
+      const [uploading, setUploading] = useState(false);
+      const [viewerOpen, setViewerOpen] = useState(false);
+      const [viewerTitle, setViewerTitle] = useState("Источник");
+      const [viewerContent, setViewerContent] = useState("");
+      const [viewerLoading, setViewerLoading] = useState(false);
+      const [uploadFileList, setUploadFileList] = useState([]);
+      const [adminForm] = Form.useForm();
+      const [msgApi, contextHolder] = message.useMessage();
+      const chatLogRef = useRef(null);
+
+      const scrollBottom = () => {
+        if (!chatLogRef.current) return;
+        chatLogRef.current.scrollTop = chatLogRef.current.scrollHeight;
+      };
+
+      const loadSession = async () => {
+        const response = await fetch("/api/session");
+        const data = await response.json();
+        setIsAdmin(Boolean(data.is_admin));
+      };
+
+      const loadHistory = async () => {
+        const response = await fetch("/api/chat/history");
+        const data = await response.json();
+        setMessagesData(Array.isArray(data.messages) ? data.messages : []);
+      };
+
+      const loadSources = async () => {
+        const response = await fetch("/api/sources");
+        const data = await response.json();
+        setSources(Array.isArray(data.sources) ? data.sources : []);
+      };
+
+      useEffect(() => {
+        (async () => {
+          await Promise.all([loadSession(), loadHistory(), loadSources()]);
+          setTimeout(scrollBottom, 0);
+        })();
+      }, []);
+
+      useEffect(() => {
+        localStorage.setItem("rag-theme-mode", themeMode);
+        const isDark = themeMode === "dark";
+        document.body.style.backgroundColor = isDark ? "#141414" : "#f5f5f5";
+        document.body.style.color = isDark ? "#f0f0f0" : "#141414";
+        document.documentElement.style.backgroundColor = isDark ? "#141414" : "#f5f5f5";
+      }, [themeMode]);
+
+      useEffect(() => {
+        scrollBottom();
+      }, [messagesData]);
+
+      const submitQuery = async () => {
+        const clean = query.trim();
+        if (!clean || sending) return;
+
+        setQuery("");
+        const thinkingId = `thinking-${Date.now()}`;
+        setMessagesData((prev) => [
+          ...prev,
+          { role: "user", text: clean },
+          { role: "assistant", text: "Думает...", _thinkingId: thinkingId },
+        ]);
+        setSending(true);
+
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: clean }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Ошибка запроса.");
+
+          setMessagesData((prev) =>
+            prev.map((item) =>
+              item._thinkingId === thinkingId
+                ? { role: "assistant", text: data.answer || "Пустой ответ.", sources: data.sources || [] }
+                : item
+            )
+          );
+        } catch (error) {
+          setMessagesData((prev) =>
+            prev.map((item) =>
+              item._thinkingId === thinkingId
+                ? { role: "assistant", text: error.message || "Ошибка запроса." }
+                : item
+            )
+          );
+        } finally {
+          setSending(false);
+        }
+      };
+
+      const clearChat = async () => {
+        const response = await fetch("/api/chat/clear", { method: "POST" });
+        if (!response.ok) {
+          msgApi.error("Не удалось очистить чат.");
+          return;
+        }
+        setMessagesData([]);
+      };
+
+      const openSource = async (sourcePath) => {
+        setViewerOpen(true);
+        setViewerLoading(true);
+        setViewerTitle("Загрузка источника...");
+        setViewerContent("");
+        try {
+          const response = await fetch(`/api/source-content?source_path=${encodeURIComponent(sourcePath)}`);
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Не удалось загрузить источник.");
+          setViewerTitle(data.source_name || "Источник");
+          setViewerContent(
+            data.truncated
+              ? `${data.content || ""}\n\n[Показана только часть файла]`
+              : (data.content || "(Пустой файл)")
+          );
+        } catch (error) {
+          setViewerTitle("Ошибка");
+          setViewerContent(error.message || "Не удалось загрузить источник.");
+        } finally {
+          setViewerLoading(false);
+        }
+      };
+
+      const handleAdminLogin = async (values) => {
+        setAdminLoading(true);
+        try {
+          const response = await fetch("/api/admin/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(values),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Ошибка входа.");
+          setIsAdmin(true);
+          adminForm.resetFields();
+          msgApi.success("Вход выполнен.");
+        } catch (error) {
+          msgApi.error(error.message || "Ошибка входа.");
+        } finally {
+          setAdminLoading(false);
+        }
+      };
+
+      const handleAdminLogout = async () => {
+        await fetch("/api/admin/logout", { method: "POST" });
+        setIsAdmin(false);
+      };
+
+      const uploadProps = {
+        multiple: true,
+        beforeUpload: () => false,
+        fileList: uploadFileList,
+        onChange: ({ fileList }) => setUploadFileList(fileList),
+        showUploadList: true,
+      };
+
+      const handleUploadAll = async () => {
+        if (!uploadFileList.length) {
+          msgApi.warning("Сначала выбери файлы.");
+          return;
+        }
+        setUploading(true);
+        try {
+          const formData = new FormData();
+          uploadFileList.forEach((file) => formData.append("files", file.originFileObj));
+          const response = await fetch("/api/admin/upload", { method: "POST", body: formData });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Ошибка загрузки.");
+          setSources(Array.isArray(data.sources) ? data.sources : []);
+          setUploadFileList([]);
+          msgApi.success("Файлы загружены и проиндексированы.");
+        } catch (error) {
+          msgApi.error(error.message || "Ошибка загрузки.");
+        } finally {
+          setUploading(false);
+        }
+      };
+
+      const knowledgeList = useMemo(
+        () => (
+          <List
+            size="small"
+            dataSource={sources}
+            locale={{ emptyText: "Пока нет загруженных источников." }}
+            renderItem={(item) => (
+              <List.Item>
+                <Space direction="vertical" size={0}>
+                  <SourceLink
+                    sourceName={item.source_name}
+                    sourcePath={item.source_path}
+                    onOpen={openSource}
+                  />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {item.chunks} chunks
+                  </Text>
+                </Space>
+              </List.Item>
+            )}
+          />
+        ),
+        [sources]
+      );
+
+      return (
+        <ConfigProvider theme={{ algorithm: themeMode === "dark" ? darkAlgorithm : defaultAlgorithm }}>
+          <AntdApp>
+            {contextHolder}
+            <div className="app-shell">
+              <Row gutter={[12, 12]}>
+                <Col xs={24} lg={18}>
+                  <Card className="chat-panel">
+                    <Space direction="vertical" style={{ width: "100%" }} size={4}>
+                      <Space style={{ width: "100%", justifyContent: "space-between" }}>
+                        <div>
+                          <Title level={4} style={{ margin: 0 }}>RAG MVP Chat</Title>
+                          <Text type="secondary">Реактивный интерфейс</Text>
+                        </div>
+                        <Space>
+                          <Button onClick={() => setThemeMode((prev) => (prev === "dark" ? "light" : "dark"))}>
+                            {themeMode === "dark" ? "Light" : "Dark"}
+                          </Button>
+                          <Button onClick={clearChat}>Очистить чат</Button>
+                        </Space>
+                      </Space>
+                    </Space>
+
+                    <div className="chat-log" ref={chatLogRef}>
+                      {messagesData.length === 0 && (
+                        <Text type="secondary">Начни диалог: задай первый вопрос.</Text>
+                      )}
+
+                      {messagesData.map((item, idx) => (
+                        <div key={`${idx}-${item.role}`} className={`msg ${item.role}`}>
+                        {item.role === "user" ? (
+                          <div className="user-bubble">{item.text}</div>
+                        ) : (
+                          <div>{item.text}</div>
+                        )}
+                          {item.role === "assistant" && Array.isArray(item.sources) && item.sources.length > 0 && (
+                            <Card size="small" className="sources-box">
+                              <Text strong>Источники:</Text>
+                              <ul>
+                                {item.sources.map((source, sidx) => (
+                                  <li key={`${idx}-${sidx}`}>
+                                    <SourceLink
+                                      sourceName={source.source_name}
+                                      sourcePath={source.source_path}
+                                      onOpen={openSource}
+                                    />
+                                    {source.chunk_index !== null && source.chunk_index !== undefined
+                                      ? ` (chunk ${source.chunk_index})`
+                                      : ""}
+                                    {" — "}
+                                    {source.snippet || ""}
+                                  </li>
+                                ))}
+                              </ul>
+                            </Card>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="chat-input">
+                      <Search
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onSearch={submitQuery}
+                        enterButton={sending ? "Думает..." : "Отправить"}
+                        loading={sending}
+                        placeholder="Введите вопрос..."
+                        allowClear
+                      />
+                    </div>
+                  </Card>
+                </Col>
+
+                <Col xs={24} lg={6}>
+                  <Space direction="vertical" size={12} style={{ width: "100%" }}>
+                    <Card title="Админ">
+                      {isAdmin ? (
+                        <Space direction="vertical" style={{ width: "100%" }}>
+                          <Text type="secondary">Вы вошли как администратор.</Text>
+                          <Button onClick={handleAdminLogout}>Выйти</Button>
+                          <Upload {...uploadProps}>
+                            <Button>Выбрать файлы</Button>
+                          </Upload>
+                          <Button loading={uploading} onClick={handleUploadAll}>
+                            Загрузить и проиндексировать
+                          </Button>
+                        </Space>
+                      ) : (
+                        <Form form={adminForm} layout="vertical" onFinish={handleAdminLogin}>
+                          <Form.Item name="username" label="Логин" rules={[{ required: true }]}>
+                            <Input />
+                          </Form.Item>
+                          <Form.Item name="password" label="Пароль" rules={[{ required: true }]}>
+                            <Input.Password />
+                          </Form.Item>
+                          <Button htmlType="submit" loading={adminLoading}>Войти</Button>
+                        </Form>
+                      )}
+                    </Card>
+
+                    <Card title="База знаний">
+                      {knowledgeList}
+                    </Card>
+                  </Space>
+                </Col>
+              </Row>
+            </div>
+
+            <Modal
+              open={viewerOpen}
+              onCancel={() => setViewerOpen(false)}
+              footer={null}
+              title={viewerTitle}
+              width={980}
+            >
+              {viewerLoading ? <Spin /> : <div className="viewer-content">{viewerContent}</div>}
+            </Modal>
+          </AntdApp>
+        </ConfigProvider>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

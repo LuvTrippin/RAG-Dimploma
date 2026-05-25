@@ -1,0 +1,13 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+webapp_data/chats/
+webapp_data/chroma_web/
+webapp_data/uploads/
+results/
+*.ipynb

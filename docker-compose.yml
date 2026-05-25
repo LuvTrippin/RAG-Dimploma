@@ -1,0 +1,18 @@
+services:
+  rag-webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-webapp
+    ports:
+      - "8000:8000"
+    environment:
+      RAG_ADMIN_USERNAME: ${RAG_ADMIN_USERNAME:-admin}
+      RAG_ADMIN_PASSWORD: ${RAG_ADMIN_PASSWORD:-admin}
+      RAG_ADMIN_TOKEN: ${RAG_ADMIN_TOKEN:-mvp-admin-token}
+      RAG_LLM_MODEL: ${RAG_LLM_MODEL:-qwen:7b}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    volumes:
+      - ./webapp_data:/app/webapp_data
+    restart: unless-stopped

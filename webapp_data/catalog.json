@@ -1,0 +1,14 @@
+[
+  {
+    "source_name": "Тест.txt",
+    "source_path": "webapp_data\\uploads\\Тест.txt",
+    "source_id": "Тест",
+    "chunks": 1
+  },
+  {
+    "source_name": "О челГУ.txt",
+    "source_path": "webapp_data\\uploads\\О челГУ.txt",
+    "source_id": "О челГУ",
+    "chunks": 2
+  }
+]

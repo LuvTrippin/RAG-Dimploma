@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    :root {
+      --bg-main: #2c2c2e;
+      --bg-chat: #43454a;
+      --bg-sidebar: #1b1b1c;
+      --bg-user: #2c2c2e;
+      --text-main: #f9fafb;
+      --border-main: #5b5d63;
+    }
+    body {
+      font-family: Inter, Arial, sans-serif;
+      margin: 0;
+      background: var(--bg-main);
+      color: var(--text-main);
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px 16px;
+      display: grid;
+      grid-template-columns: 1fr 330px;
+      gap: 16px;
+    }
+    .card {
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border-main);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    h1, h2, h3 {
+      margin-top: 0;
+      color: var(--text-main);
+    }
+    .main-panel {
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100vh - 40px);
+      gap: 12px;
+    }
+    .chat-shell {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-chat);
+      border: 1px solid var(--border-main);
+      border-radius: 14px;
+      overflow: hidden;
+      min-height: 70vh;
+    }
+    .chat-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-main);
+      background: var(--bg-chat);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chat-log {
+      padding: 18px;
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .message {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 85%;
+    }
+    .message.user {
+      align-self: flex-end;
+    }
+    .message.assistant {
+      align-self: flex-start;
+      max-width: 100%;
+    }
+    .bubble {
+      border-radius: 14px;
+      padding: 12px 14px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+    .message.user .bubble {
+      background: var(--bg-user);
+      color: var(--text-main);
+      border: 1px solid var(--border-main);
+    }
+    .message.assistant .bubble {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: var(--text-main);
+    }
+    .sources-inline {
+      font-size: 12px;
+      color: var(--text-main);
+      background: var(--bg-main);
+      border: 1px solid var(--border-main);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .chat-input {
+      border-top: 1px solid var(--border-main);
+      padding: 12px;
+      background: var(--bg-chat);
+    }
+    textarea, input[type="text"], input[type="password"], input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border-main);
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
+      background: var(--bg-main);
+      color: var(--text-main);
+    }
+    button {
+      background: var(--bg-main);
+      color: var(--text-main);
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    button.secondary {
+      background: var(--bg-main);
+    }
+    button.ghost {
+      background: transparent;
+      border: 1px solid var(--border-main);
+      color: var(--text-main);
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .sources {
+      font-size: 13px;
+      color: var(--text-main);
+      line-height: 1.4;
+    }
+    .source-link {
+      color: var(--text-main);
+      text-decoration: underline;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font: inherit;
+    }
+    .viewer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 9999;
+    }
+    .viewer-overlay.open {
+      display: flex;
+    }
+    .viewer-modal {
+      width: min(1000px, 95vw);
+      max-height: 85vh;
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border-main);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .viewer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-main);
+      gap: 12px;
+    }
+    .viewer-title {
+      font-size: 14px;
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .viewer-content {
+      padding: 14px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-main);
+      background: var(--bg-main);
+      flex: 1;
+    }
+    .muted {
+      color: var(--text-main);
+      opacity: 0.82;
+      font-size: 13px;
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    @media (max-width: 980px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+      .main-panel {
+        min-height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="main-panel">
+      <div class="chat-shell">
+        <div class="chat-header">
+          <div>
+            <h1 style="margin:0;">{{ title }}</h1>
+            <div class="muted">RAG-чат с сохранением истории</div>
+          </div>
+          <form method="post" action="/chat/clear" style="margin:0;">
+            <button type="submit" class="ghost">Очистить чат</button>
+          </form>
+        </div>
+
+        <div class="chat-log" id="chat-log">
+          {% if messages %}
+            {% for message in messages %}
+              <div class="message {{ message.role }}">
+                <div class="bubble">{{ message.text }}</div>
+                {% if message.role == "assistant" and message.sources %}
+                  <div class="sources-inline">
+                    <strong>Источники:</strong>
+                    <ul>
+                      {% for source in message.sources %}
+                        <li>
+                          {% if source.source_path %}
+                            <button
+                              type="button"
+                              class="source-link"
+                              data-source-path="{{ source.source_path }}"
+                            >
+                              {{ source.source_name }}
+                            </button>
+                          {% else %}
+                            {{ source.source_name }}
+                          {% endif %}
+                          {% if source.chunk_index is not none %}(chunk {{ source.chunk_index }}){% endif %}
+                          — {{ source.snippet }}
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="muted">Начни диалог: задай первый вопрос.</div>
+          {% endif %}
+        </div>
+
+        <div class="chat-input">
+          <form method="post" action="/chat" id="chat-form">
+            <textarea name="query" id="query-input" rows="3" placeholder="Введите вопрос..." required>{{ query }}</textarea>
+            <button type="submit" id="send-btn">Отправить</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="card">
+        <h2>Админ</h2>
+        {% if error %}
+          <p style="color:#ff8080; font-weight:600;">{{ error }}</p>
+        {% endif %}
+        {% if is_admin %}
+          <p class="muted">Вы вошли как администратор.</p>
+          <form method="post" action="/admin/logout">
+            <button type="submit" class="secondary">Выйти</button>
+          </form>
+          <hr style="border-color:var(--border-main);">
+          <h3>Загрузка документов</h3>
+          <form method="post" action="/admin/upload" enctype="multipart/form-data">
+            <input type="file" name="files" multiple required>
+            <button type="submit">Загрузить и проиндексировать</button>
+          </form>
+        {% else %}
+          <p class="muted">Только админ может пополнять базу знаний.</p>
+          <form method="post" action="/admin/login">
+            <div class="row">
+              <div>
+                <label>Логин</label>
+                <input type="text" name="username" required>
+              </div>
+              <div>
+                <label>Пароль</label>
+                <input type="password" name="password" required>
+              </div>
+            </div>
+            <button type="submit">Войти</button>
+          </form>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <h2>База знаний</h2>
+        {% if sources %}
+          <ul class="sources">
+            {% for source in sources %}
+            <li>
+              <button
+                type="button"
+                class="source-link"
+                data-source-path="{{ source.source_path }}"
+              >
+                {{ source.source_name }}
+              </button>
+              ({{ source.chunks }} chunks)
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">Пока нет загруженных источников.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="viewer-overlay" id="source-viewer">
+    <div class="viewer-modal">
+      <div class="viewer-header">
+        <div class="viewer-title" id="viewer-title">Источник</div>
+        <button type="button" class="ghost" id="viewer-close">Закрыть</button>
+      </div>
+      <div class="viewer-content" id="viewer-content">Загрузка...</div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const chatForm = document.getElementById("chat-form");
+      const chatLog = document.getElementById("chat-log");
+      const queryInput = document.getElementById("query-input");
+      const sendBtn = document.getElementById("send-btn");
+      const sourceViewer = document.getElementById("source-viewer");
+      const viewerTitle = document.getElementById("viewer-title");
+      const viewerContent = document.getElementById("viewer-content");
+      const viewerClose = document.getElementById("viewer-close");
+      if (!chatForm || !chatLog || !queryInput || !sendBtn) return;
+
+      function scrollToBottom() {
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+
+      async function openSourceViewer(rawSourcePath) {
+        if (!sourceViewer || !viewerTitle || !viewerContent) return;
+        sourceViewer.classList.add("open");
+        viewerTitle.textContent = "Загрузка источника...";
+        viewerContent.textContent = "Загрузка...";
+
+        try {
+          const response = await fetch(`/api/source-content?source_path=${encodeURIComponent(rawSourcePath)}`);
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({ error: "Не удалось загрузить источник." }));
+            viewerTitle.textContent = "Ошибка";
+            viewerContent.textContent = payload.error || "Не удалось загрузить источник.";
+            return;
+          }
+
+          const payload = await response.json();
+          viewerTitle.textContent = payload.source_name || "Источник";
+          viewerContent.textContent = payload.content || "(Пустой файл)";
+          if (payload.truncated) {
+            viewerContent.textContent += "\n\n[Показана только часть файла]";
+          }
+        } catch (_) {
+          viewerTitle.textContent = "Ошибка";
+          viewerContent.textContent = "Сетевая ошибка при загрузке источника.";
+        }
+      }
+
+      function closeSourceViewer() {
+        if (!sourceViewer) return;
+        sourceViewer.classList.remove("open");
+      }
+
+      document.addEventListener("click", function (event) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const sourceButton = target.closest(".source-link");
+        if (sourceButton && sourceButton instanceof HTMLElement) {
+          const sourcePath = sourceButton.getAttribute("data-source-path");
+          if (sourcePath) {
+            openSourceViewer(decodeURIComponent(sourcePath));
+          }
+        }
+      });
+
+      if (viewerClose) {
+        viewerClose.addEventListener("click", closeSourceViewer);
+      }
+      if (sourceViewer) {
+        sourceViewer.addEventListener("click", function (event) {
+          if (event.target === sourceViewer) closeSourceViewer();
+        });
+      }
+
+      function appendMessage(role, text, sources) {
+        const wrapper = document.createElement("div");
+        wrapper.className = `message ${role}`;
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = text;
+        wrapper.appendChild(bubble);
+
+        if (role === "assistant" && Array.isArray(sources) && sources.length > 0) {
+          const sourcesBlock = document.createElement("div");
+          sourcesBlock.className = "sources-inline";
+          const title = document.createElement("strong");
+          title.textContent = "Источники:";
+          sourcesBlock.appendChild(title);
+
+          const ul = document.createElement("ul");
+          for (const source of sources) {
+            const li = document.createElement("li");
+            const chunkSuffix = source.chunk_index !== null && source.chunk_index !== undefined
+              ? ` (chunk ${source.chunk_index})`
+              : "";
+            if (source && source.source_path) {
+              const sourceButton = document.createElement("button");
+              sourceButton.type = "button";
+              sourceButton.className = "source-link";
+              sourceButton.setAttribute("data-source-path", source.source_path);
+              sourceButton.textContent = source.source_name || "unknown";
+              li.appendChild(sourceButton);
+            } else {
+              const sourceName = document.createTextNode(source && source.source_name ? source.source_name : "unknown");
+              li.appendChild(sourceName);
+            }
+            li.appendChild(document.createTextNode(`${chunkSuffix} — ${source.snippet || ""}`));
+            ul.appendChild(li);
+          }
+          sourcesBlock.appendChild(ul);
+          wrapper.appendChild(sourcesBlock);
+        }
+
+        chatLog.appendChild(wrapper);
+        scrollToBottom();
+        return wrapper;
+      }
+
+      chatForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const query = queryInput.value.trim();
+        if (!query) return;
+
+        appendMessage("user", query);
+        queryInput.value = "";
+        sendBtn.disabled = true;
+
+        const thinkingMessage = appendMessage("assistant", "Думает...");
+
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query }),
+          });
+
+          if (!response.ok) {
+            let fallbackError = "Ошибка запроса к серверу.";
+            try {
+              const payload = await response.json();
+              if (payload && payload.error) fallbackError = payload.error;
+            } catch (_) {
+              // keep fallback
+            }
+            thinkingMessage.querySelector(".bubble").textContent = fallbackError;
+            return;
+          }
+
+          const payload = await response.json();
+          thinkingMessage.querySelector(".bubble").textContent = payload.answer || "Пустой ответ.";
+
+          if (Array.isArray(payload.sources) && payload.sources.length > 0) {
+            const sourcesBlock = document.createElement("div");
+            sourcesBlock.className = "sources-inline";
+            const title = document.createElement("strong");
+            title.textContent = "Источники:";
+            sourcesBlock.appendChild(title);
+
+            const ul = document.createElement("ul");
+            for (const source of payload.sources) {
+              const li = document.createElement("li");
+              const chunkSuffix = source.chunk_index !== null && source.chunk_index !== undefined
+                ? ` (chunk ${source.chunk_index})`
+                : "";
+              li.textContent = `${source.source_name}${chunkSuffix} — ${source.snippet}`;
+              ul.appendChild(li);
+            }
+            sourcesBlock.appendChild(ul);
+            thinkingMessage.appendChild(sourcesBlock);
+          }
+        } catch (error) {
+          thinkingMessage.querySelector(".bubble").textContent = "Сетевая ошибка. Попробуй еще раз.";
+        } finally {
+          sendBtn.disabled = false;
+          queryInput.focus();
+          scrollToBottom();
+        }
+      });
+
+      scrollToBottom();
+    })();
+  </script>
+</body>
+</html>
